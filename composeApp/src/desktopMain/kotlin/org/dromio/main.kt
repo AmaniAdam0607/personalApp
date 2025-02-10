@@ -7,6 +7,6 @@ fun main() = application {
   Window(
   onCloseRequest = ::exitApplication,
   title = "Avelyn Shop",
-  resizable = false)
+  resizable = true)
   { App() }
 }

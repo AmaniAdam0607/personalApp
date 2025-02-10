@@ -8,10 +8,10 @@ plugins {
 
 kotlin {
     jvm("desktop")
-    
+
     sourceSets {
         val desktopMain by getting
-        
+
         commonMain.dependencies {
             implementation(compose.runtime)
             implementation(compose.foundation)
@@ -21,6 +21,13 @@ kotlin {
             implementation(compose.components.uiToolingPreview)
             implementation(libs.androidx.lifecycle.viewmodel)
             implementation(libs.androidx.lifecycle.runtime.compose)
+            implementation(compose.materialIconsExtended)
+
+            // Add SQLite dependencies
+            implementation("org.jetbrains.exposed:exposed-core:0.41.1")
+            implementation("org.jetbrains.exposed:exposed-dao:0.41.1")
+            implementation("org.jetbrains.exposed:exposed-jdbc:0.41.1")
+            implementation("org.xerial:sqlite-jdbc:3.42.0.0")
         }
         desktopMain.dependencies {
             implementation(compose.desktop.currentOs)
