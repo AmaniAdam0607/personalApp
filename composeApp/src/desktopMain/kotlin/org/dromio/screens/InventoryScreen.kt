@@ -17,6 +17,7 @@ import org.dromio.Colors
 import org.dromio.repository.ProductRepository
 import org.dromio.models.Product
 import org.dromio.components.AddEditProductDialog
+import org.dromio.Constants.CURRENCY_SYMBOL
 
 private val productRepository = ProductRepository()
 
@@ -110,13 +111,22 @@ fun InventoryScreen() {
         AddEditProductDialog(
             product = editingProduct,
             onDismiss = { showAddEditDialog = false },
-            onSave = { name, price, stock ->
+            onSave = { name, sellingPrice, buyingPrice, stock ->
                 if (editingProduct != null) {
-                    // Update existing product
-                    productRepository.updateProduct(editingProduct!!.id, name, price, stock)
+                    productRepository.updateProduct(
+                        editingProduct!!.id,
+                        name,
+                        sellingPrice,
+                        buyingPrice,
+                        stock
+                    )
                 } else {
-                    // Add new product
-                    productRepository.addProduct(name, price, stock)
+                    productRepository.addProduct(
+                        name,
+                        sellingPrice,
+                        buyingPrice,
+                        stock
+                    )
                 }
                 showAddEditDialog = false
             }
@@ -159,7 +169,7 @@ private fun InventoryRow(
             modifier = Modifier.fillMaxWidth(0.3f)
         )
         Text(
-            text = "$${item.price}",
+            text = "$CURRENCY_SYMBOL${item.sellingPrice}", // Changed here
             modifier = Modifier.fillMaxWidth(0.2f)
         )
         Text(

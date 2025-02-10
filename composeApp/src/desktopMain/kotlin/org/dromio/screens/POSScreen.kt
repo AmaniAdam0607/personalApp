@@ -12,91 +12,108 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import org.dromio.Colors
 import org.dromio.Constants.CURRENCY_SYMBOL
-import org.dromio.Constants.TAX_RATE
 import org.dromio.utils.rotate
 import org.dromio.models.Product
 import org.dromio.repository.ProductRepository
 import org.dromio.repository.TransactionRepository
+import org.dromio.models.CartItem
 
 private val productRepository = ProductRepository()
 private val transactionRepository = TransactionRepository()
 
-data class CartItem(val product: Product, val quantity: Int = 1)
-
 @Composable
-fun POSScreen() {
+fun POSScreen(onLogout: () -> Unit = {}) {  // Add logout callback
     var searchQuery by remember { mutableStateOf("") }
     val cartItems = remember { mutableStateListOf<CartItem>() }
     var paymentMethod by remember { mutableStateOf("Cash") }
-    val products = remember { mutableStateListOf<Product>() }
+    var products by remember { mutableStateOf(emptyList<Product>()) }
 
+    // Load products initially and when search changes
     LaunchedEffect(searchQuery) {
-        products.clear()
-        products.addAll(
-            if (searchQuery.isEmpty()) {
-                productRepository.getAllProducts()
-            } else {
-                productRepository.searchProducts(searchQuery)
-            }
-        )
+        products = if (searchQuery.isEmpty()) {
+            productRepository.getAllProducts()
+        } else {
+            productRepository.searchProducts(searchQuery)
+        }
     }
 
-    Row(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // Left Panel - Product Search and Grid (66% of space)
-        Column(
-            modifier = Modifier.fillMaxWidth(0.66f),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        // Add logout button in header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            ProductSearch(searchQuery, onSearchChange = { searchQuery = it })
-            ProductGrid(
-                products = products.filter {
-                    it.name.contains(searchQuery, ignoreCase = true)
-                },
-                onAddToCart = { product ->
-                    if (product.stockQuantity > 0) {
-                        cartItems.addOrUpdate(product)
-                    }
-                }
-            )
+            Text("Point of Sale", style = MaterialTheme.typography.h5)
+            Button(
+                onClick = onLogout,
+                colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.error)
+            ) {
+                Icon(Icons.Default.ExitToApp, contentDescription = "Logout")
+                Spacer(Modifier.width(8.dp))
+                Text("Logout", color = MaterialTheme.colors.onError)
+            }
         }
 
-        // Right Panel - Cart and Payment
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        Spacer(Modifier.height(16.dp))
+
+        // Rest of existing POS layout
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Cart(
-                items = cartItems,
-                onRemoveItem = { cartItems.remove(it) },
-                modifier = Modifier.weight(1f)
-            )
+            // Left Panel - Product Search and Grid (66% of space)
+            Column(
+                modifier = Modifier.fillMaxWidth(0.66f),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                ProductSearch(searchQuery, onSearchChange = { searchQuery = it })
+                ProductGrid(
+                    products = products,  // Use the loaded products
+                    onAddToCart = { product ->
+                        if (product.stockQuantity > 0) {
+                            cartItems.addOrUpdate(product)
+                        }
+                    }
+                )
+            }
 
-            PaymentSection(
-                items = cartItems,
-                paymentMethod = paymentMethod,
-                onPaymentMethodChange = { paymentMethod = it },
-                onProcessSale = {
-                    val subtotal = cartItems.sumOf { it.product.price * it.quantity }
-                    val tax = subtotal * TAX_RATE
-                    val total = subtotal + tax
+            // Right Panel - Cart and Payment
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Cart(
+                    items = cartItems,
+                    onRemoveItem = { cartItems.remove(it) },
+                    modifier = Modifier.weight(1f)
+                )
 
-                    transactionRepository.createTransaction(
-                        items = cartItems.toList(),
-                        total = total,
-                        paymentMethod = paymentMethod
-                    )
-                    cartItems.clear()
-                }
-            )
+                PaymentSection(
+                    items = cartItems,
+                    paymentMethod = paymentMethod,
+                    onPaymentMethodChange = { paymentMethod = it },
+                    onProcessSale = {
+                        val total = cartItems.sumOf {
+                            it.product.sellingPrice * it.quantity.toDouble()
+                        }
+
+                        transactionRepository.createTransaction(
+                            items = cartItems.toList(),
+                            total = total,
+                            paymentMethod = paymentMethod
+                        )
+                        cartItems.clear()
+                    }
+                )
+            }
         }
     }
 }
@@ -142,7 +159,7 @@ private fun ProductItem(product: Product, onAddToCart: (Product) -> Unit) {
             Column {
                 Text(product.name, style = MaterialTheme.typography.h6, color = Colors.TextPrimary)
                 Text(
-                    "$CURRENCY_SYMBOL${String.format("%.2f", product.price)}",
+                    "$CURRENCY_SYMBOL${String.format("%.2f", product.sellingPrice)}",
                     color = Colors.TextSecondary
                 )
                 Text(
@@ -208,7 +225,7 @@ private fun CartItemRow(item: CartItem, onRemove: (CartItem) -> Unit) {
     ) {
         Column(modifier = Modifier.fillMaxWidth(0.8f)) {
             Text(item.product.name)
-            Text("Qty: ${item.quantity} x $${String.format("%.2f", item.product.price)}")
+            Text("Qty: ${item.quantity} x ${CURRENCY_SYMBOL}${String.format("%.2f", item.product.sellingPrice)}")
         }
         IconButton(onClick = { onRemove(item) }) {
             Icon(Icons.Default.Close, "Remove", tint = MaterialTheme.colors.error)
@@ -223,9 +240,7 @@ private fun PaymentSection(
     onPaymentMethodChange: (String) -> Unit,
     onProcessSale: () -> Unit
 ) {
-    val subtotal = items.sumOf { it.product.price * it.quantity }
-    val tax = subtotal * TAX_RATE
-    val total = subtotal + tax
+    val total = items.sumOf { it.product.sellingPrice * it.quantity }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -276,15 +291,19 @@ private fun PaymentSection(
                 }
             }
 
-            // Totals
-            Column(
+            // Total
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                TotalRow("Subtotal:", subtotal)
-                TotalRow("Tax (${(TAX_RATE * 100).toInt()}%):", tax)
-                Divider()
-                TotalRow("Total:", total, true)
+                Text(
+                    "Total:",
+                    style = MaterialTheme.typography.h6
+                )
+                Text(
+                    "$CURRENCY_SYMBOL${String.format("%.2f", total)}",
+                    style = MaterialTheme.typography.h6
+                )
             }
 
             // Process Sale Button

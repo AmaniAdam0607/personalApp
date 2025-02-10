@@ -23,6 +23,7 @@ import androidx.compose.ui.window.rememberWindowState
 import java.awt.Dimension
 import java.awt.Toolkit
 import org.dromio.screens.*
+import org.dromio.models.User
 import org.dromio.database.Database
 
 enum class Screen {
@@ -34,30 +35,41 @@ enum class Screen {
 
 @Composable
 fun App() {
+    LaunchedEffect(Unit) {
+        Database.ensureInitialized() // Ensure DB is initialized in composition
+    }
+
+    var currentUser by remember { mutableStateOf<User?>(null) }
     var currentScreen by remember { mutableStateOf(Screen.POS) }
 
-    MaterialTheme(
-        colors = MaterialTheme.colors.copy(
-            primary = Colors.Primary,
-            secondary = Colors.Secondary,
-            background = Colors.Background,
-            surface = Colors.Surface,
-            onPrimary = Color.White,
-            onSecondary = Color.White
-        )
-    ) {
+    if (currentUser == null) {
+        LoginScreen { user ->  // Accept user parameter
+            currentUser = user
+            currentScreen = Screen.POS
+        }
+        return
+    }
+
+    MaterialTheme {
         Row(modifier = Modifier.fillMaxSize()) {
             NavigationBar(
                 currentScreen = currentScreen,
-                onScreenChange = { currentScreen = it }
+                onScreenChange = { currentScreen = it },
+                isAdmin = currentUser?.isAdmin ?: false
             )
 
             Box(modifier = Modifier.fillMaxWidth()) {
                 when (currentScreen) {
-                    Screen.POS -> POSScreen()
-                    Screen.REPORTS -> ReportsScreen()
-                    Screen.INVENTORY -> InventoryScreen()
-                    Screen.SETTINGS -> SettingsScreen()
+                    Screen.POS -> POSScreen(
+                        onLogout = { currentUser = null }
+                    )
+                    Screen.REPORTS -> if (currentUser?.isAdmin == true) ReportsScreen()
+                    Screen.INVENTORY -> if (currentUser?.isAdmin == true) InventoryScreen()
+                    Screen.SETTINGS -> if (currentUser?.isAdmin == true) {
+                        SettingsScreen(
+                            onLogout = { currentUser = null }
+                        )
+                    }
                 }
             }
         }
@@ -67,7 +79,8 @@ fun App() {
 @Composable
 private fun NavigationBar(
     currentScreen: Screen,
-    onScreenChange: (Screen) -> Unit
+    onScreenChange: (Screen) -> Unit,
+    isAdmin: Boolean
 ) {
     Column(
         modifier = Modifier
@@ -84,24 +97,27 @@ private fun NavigationBar(
             selected = currentScreen == Screen.POS,
             onClick = { onScreenChange(Screen.POS) }
         )
-        NavItem(
-            icon = Icons.Default.Assessment,
-            label = "Reports",
-            selected = currentScreen == Screen.REPORTS,
-            onClick = { onScreenChange(Screen.REPORTS) }
-        )
-        NavItem(
-            icon = Icons.Default.Inventory,
-            label = "Inventory",
-            selected = currentScreen == Screen.INVENTORY,
-            onClick = { onScreenChange(Screen.INVENTORY) }
-        )
-        NavItem(
-            icon = Icons.Default.Settings,
-            label = "Settings",
-            selected = currentScreen == Screen.SETTINGS,
-            onClick = { onScreenChange(Screen.SETTINGS) }
-        )
+
+        if (isAdmin) {
+            NavItem(
+                icon = Icons.Default.Assessment,
+                label = "Reports",
+                selected = currentScreen == Screen.REPORTS,
+                onClick = { onScreenChange(Screen.REPORTS) }
+            )
+            NavItem(
+                icon = Icons.Default.Inventory,
+                label = "Inventory",
+                selected = currentScreen == Screen.INVENTORY,
+                onClick = { onScreenChange(Screen.INVENTORY) }
+            )
+            NavItem(
+                icon = Icons.Default.Settings,
+                label = "Settings",
+                selected = currentScreen == Screen.SETTINGS,
+                onClick = { onScreenChange(Screen.SETTINGS) }
+            )
+        }
     }
 }
 
@@ -144,6 +160,8 @@ private fun initializeApp(): Boolean {
 }
 
 fun main() = application {
+    Database.init() // Initialize DB first
+
     if (!initializeApp()) {
         exitApplication()
         return@application

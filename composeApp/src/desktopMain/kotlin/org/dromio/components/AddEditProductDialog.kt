@@ -12,10 +12,11 @@ import org.dromio.models.Product
 fun AddEditProductDialog(
     product: Product? = null,
     onDismiss: () -> Unit,
-    onSave: (name: String, price: Double, stock: Int) -> Unit
+    onSave: (name: String, sellingPrice: Double, buyingPrice: Double, stock: Int) -> Unit
 ) {
     var name by remember { mutableStateOf(product?.name ?: "") }
-    var price by remember { mutableStateOf(product?.price?.toString() ?: "") }
+    var sellingPrice by remember { mutableStateOf(product?.sellingPrice?.toString() ?: "") }
+    var buyingPrice by remember { mutableStateOf(product?.buyingPrice?.toString() ?: "") }
     var stock by remember { mutableStateOf(product?.stockQuantity?.toString() ?: "") }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -36,9 +37,15 @@ fun AddEditProductDialog(
                 )
 
                 OutlinedTextField(
-                    value = price,
-                    onValueChange = { price = it },
-                    label = { Text("Price") }
+                    value = sellingPrice,
+                    onValueChange = { sellingPrice = it },
+                    label = { Text("Selling Price") }
+                )
+
+                OutlinedTextField(
+                    value = buyingPrice,
+                    onValueChange = { buyingPrice = it },
+                    label = { Text("Buying Price") }
                 )
 
                 OutlinedTextField(
@@ -58,12 +65,14 @@ fun AddEditProductDialog(
                         onClick = {
                             onSave(
                                 name,
-                                price.toDoubleOrNull() ?: 0.0,
+                                sellingPrice.toDoubleOrNull() ?: 0.0,
+                                buyingPrice.toDoubleOrNull() ?: 0.0,
                                 stock.toIntOrNull() ?: 0
                             )
                         },
                         enabled = name.isNotEmpty() &&
-                                 price.toDoubleOrNull() != null &&
+                                 sellingPrice.toDoubleOrNull() != null &&
+                                 buyingPrice.toDoubleOrNull() != null &&
                                  stock.toIntOrNull() != null
                     ) {
                         Text("Save")

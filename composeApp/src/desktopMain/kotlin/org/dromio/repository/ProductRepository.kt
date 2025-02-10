@@ -15,8 +15,12 @@ class ProductRepository {
                 Product(
                     id = row[Products.id].value,
                     name = row[Products.name],
-                    price = row[Products.price],
-                    stockQuantity = row[Products.stockQuantity]
+                    sellingPrice = row[Products.sellingPrice],
+                    buyingPrice = row[Products.buyingPrice],
+                    stockQuantity = row[Products.stockQuantity],
+                    minimumStock = row[Products.minimumStock],
+                    createdAt = row[Products.createdAt],
+                    updatedAt = row[Products.updatedAt]
                 )
             }
         }
@@ -36,21 +40,30 @@ class ProductRepository {
         println("Error updating stock: ${e.message}")
     }
 
-    fun addProduct(name: String, price: Double, stock: Int): Product = try {
+    fun addProduct(
+        name: String,
+        sellingPrice: Double,
+        buyingPrice: Double,
+        stock: Int
+    ): Product = try {
         Database.ensureInitialized()
         transaction {
+            val now = System.currentTimeMillis()
             val insertStatement = Products.insert {
                 it[Products.name] = name
-                it[Products.price] = price
+                it[Products.sellingPrice] = sellingPrice
+                it[Products.buyingPrice] = buyingPrice
                 it[Products.stockQuantity] = stock
+                it[Products.createdAt] = now
+                it[Products.updatedAt] = now
             }
 
             val id = insertStatement[Products.id].value
-            Product(id, name, price, stock)
+            Product(id, name, sellingPrice, buyingPrice, stock)
         }
     } catch (e: Exception) {
         println("Error adding product: ${e.message}")
-        Product(-1, name, price, stock)
+        Product(-1, name, sellingPrice, buyingPrice, stock)
     }
 
     fun searchProducts(query: String): List<Product> = try {
@@ -61,8 +74,12 @@ class ProductRepository {
                     Product(
                         id = row[Products.id].value,
                         name = row[Products.name],
-                        price = row[Products.price],
-                        stockQuantity = row[Products.stockQuantity]
+                        sellingPrice = row[Products.sellingPrice],
+                        buyingPrice = row[Products.buyingPrice],
+                        stockQuantity = row[Products.stockQuantity],
+                        minimumStock = row[Products.minimumStock],
+                        createdAt = row[Products.createdAt],
+                        updatedAt = row[Products.updatedAt]
                     )
                 }
         }
@@ -80,13 +97,21 @@ class ProductRepository {
         println("Error deleting product: ${e.message}")
     }
 
-    fun updateProduct(id: Int, name: String, price: Double, stock: Int) = try {
+    fun updateProduct(
+        id: Int,
+        name: String,
+        sellingPrice: Double,
+        buyingPrice: Double,
+        stock: Int
+    ) = try {
         Database.ensureInitialized()
         transaction {
             Products.update({ Products.id eq id }) {
                 it[Products.name] = name
-                it[Products.price] = price
+                it[Products.sellingPrice] = sellingPrice
+                it[Products.buyingPrice] = buyingPrice
                 it[Products.stockQuantity] = stock
+                it[Products.updatedAt] = System.currentTimeMillis()
             }
         }
     } catch (e: Exception) {
