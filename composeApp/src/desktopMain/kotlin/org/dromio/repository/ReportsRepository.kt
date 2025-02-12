@@ -11,26 +11,36 @@ class ReportsRepository {
     fun getSalesReport(
         startDate: LocalDateTime,
         endDate: LocalDateTime,
-        search: String = ""
+        searchQuery: String
     ): List<SaleDetail> = transaction {
         (TransactionItems innerJoin Transactions innerJoin Products)
+            .slice(
+                Transactions.id,
+                Products.name,
+                TransactionItems.quantity,
+                TransactionItems.costAtTime,
+                TransactionItems.priceAtTime,
+                Transactions.timestamp
+            )
             .select {
                 (Transactions.timestamp greaterEq startDate.toEpochSecond(ZoneOffset.UTC)) and
                 (Transactions.timestamp lessEq endDate.toEpochSecond(ZoneOffset.UTC)) and
-                (Products.name.lowerCase() like "%${search.lowercase()}%") and
+                (Products.name.lowerCase() like "%${searchQuery.lowercase()}%") and
                 (Transactions.type eq "SALE")
             }
-            .orderBy(Transactions.timestamp to SortOrder.DESC)
             .map { row ->
+                val quantity = row[TransactionItems.quantity]
+                val buyingPrice = row[TransactionItems.costAtTime]
+                val sellingPrice = row[TransactionItems.priceAtTime]
+
                 SaleDetail(
                     id = row[Transactions.id].toString(),
                     productName = row[Products.name],
-                    quantity = row[TransactionItems.quantity],
-                    buyingPrice = row[TransactionItems.costAtTime],
-                    sellingPrice = row[TransactionItems.priceAtTime],
-                    total = row[TransactionItems.quantity] * row[TransactionItems.priceAtTime],
-                    profit = row[TransactionItems.quantity] *
-                        (row[TransactionItems.priceAtTime] - row[TransactionItems.costAtTime]),
+                    quantity = quantity,
+                    buyingPrice = buyingPrice,
+                    sellingPrice = sellingPrice,
+                    total = quantity * sellingPrice,
+                    profit = quantity * (sellingPrice - buyingPrice),
                     date = LocalDateTime.ofEpochSecond(
                         row[Transactions.timestamp],
                         0,
@@ -38,6 +48,7 @@ class ReportsRepository {
                     )
                 )
             }
+            .also { println("Debug - Found ${it.size} sales records") }  // Debug line
     }
 
     fun getProfitSummary(

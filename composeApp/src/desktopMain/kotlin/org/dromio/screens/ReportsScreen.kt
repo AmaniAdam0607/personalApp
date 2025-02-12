@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.dromio.Colors
 import org.dromio.components.DateRangePicker
@@ -72,35 +73,36 @@ fun ReportsScreen() {
         // Summary Cards with fixed width
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             SummaryCard(
                 title = "Total Sales",
                 value = Formatters.formatMoney(sales.sumOf { it.total }),
                 color = Colors.Primary,
-                modifier = Modifier.width(280.dp)
+                modifier = Modifier.weight(1f)
             )
             SummaryCard(
                 title = "Total Profit",
                 value = Formatters.formatMoney(sales.sumOf { it.profit }),
                 color = Colors.Secondary,
-                modifier = Modifier.width(280.dp)
+                modifier = Modifier.weight(1f)
             )
             SummaryCard(
                 title = "Items Sold",
                 value = sales.sumOf { it.quantity }.toString(),
                 color = Colors.Primary,
-                modifier = Modifier.width(280.dp)
+                modifier = Modifier.weight(1f)
             )
         }
 
         // Sales Table with scrollbars
         Card(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).fillMaxWidth(),
             backgroundColor = Colors.Surface,
             elevation = 4.dp
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
+                val horizontalScrollState = rememberScrollState()
                 val verticalScrollState = rememberLazyListState()
 
                 LazyColumn(
@@ -113,17 +115,17 @@ fun ReportsScreen() {
                     item {
                         Row(
                             modifier = Modifier
-                                .fillMaxWidth()
+                                .horizontalScroll(horizontalScrollState)
                                 .background(Colors.Primary.copy(alpha = 0.1f))
                                 .padding(8.dp),
                         ) {
-                            TableHeaderCell("Date", 0.15f)
-                            TableHeaderCell("Product", 0.25f) // Increased width
-                            TableHeaderCell("Qty", 0.1f)
-                            TableHeaderCell("Buy Price", 0.125f)
-                            TableHeaderCell("Sell Price", 0.125f)
-                            TableHeaderCell("Total", 0.125f)
-                            TableHeaderCell("Profit", 0.125f)
+                            TableHeaderCell("Date", 180.dp)
+                            TableHeaderCell("Product", 300.dp)
+                            TableHeaderCell("Qty", 100.dp)
+                            TableHeaderCell("Buy Price", 150.dp)
+                            TableHeaderCell("Sell Price", 150.dp)
+                            TableHeaderCell("Total", 150.dp)
+                            TableHeaderCell("Profit", 150.dp)
                         }
                         Divider()
                     }
@@ -132,62 +134,30 @@ fun ReportsScreen() {
                     items(sales) { sale ->
                         Row(
                             modifier = Modifier
-                                .fillMaxWidth()
+                                .horizontalScroll(horizontalScrollState)
                                 .padding(vertical = 8.dp, horizontal = 8.dp)
                                 .background(
                                     if (sale.profit < 0) Colors.Primary.copy(alpha = 0.05f)
                                     else Color.Transparent
                                 ),
-                            horizontalArrangement = Arrangement.Start,
-                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            TableCell(Formatters.formatDate(sale.date), 0.15f)
-                            TableCell(sale.productName, 0.25f) // Increased width
-                            TableCell(sale.quantity.toString(), 0.1f)
-                            TableCell(Formatters.formatMoney(sale.buyingPrice), 0.125f)
-                            TableCell(Formatters.formatMoney(sale.sellingPrice), 0.125f)
-                            TableCell(Formatters.formatMoney(sale.total), 0.125f)
+                            TableCell(Formatters.formatDate(sale.date), 180.dp)
+                            TableCell(sale.productName, 300.dp)
+                            TableCell(sale.quantity.toString(), 100.dp)
+                            TableCell(Formatters.formatMoney(sale.buyingPrice), 150.dp)
+                            TableCell(Formatters.formatMoney(sale.sellingPrice), 150.dp)
+                            TableCell(Formatters.formatMoney(sale.total), 150.dp)
                             TableCell(
                                 Formatters.formatMoney(sale.profit),
-                                0.125f,
+                                150.dp,
                                 if (sale.profit < 0) MaterialTheme.colors.error else Colors.TextPrimary
                             )
                         }
                         Divider(color = Colors.Primary.copy(alpha = 0.1f))
                     }
-
-                    // Footer with totals
-                    item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Colors.Primary.copy(alpha = 0.1f))
-                                .padding(vertical = 12.dp, horizontal = 8.dp),
-                            horizontalArrangement = Arrangement.Start,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "TOTALS",
-                                style = MaterialTheme.typography.subtitle1,
-                                modifier = Modifier.fillMaxWidth(0.5f),
-                                color = Colors.Primary
-                            )
-                            TableCell("Items: ${sales.sumOf { it.quantity }}", 0.125f)
-                            Spacer(Modifier.width(24.dp))
-                            TableCell(
-                                "Total: ${Formatters.formatMoney(sales.sumOf { it.total })}",
-                                0.125f
-                            )
-                            TableCell(
-                                "Profit: ${Formatters.formatMoney(sales.sumOf { it.profit })}",
-                                0.25f,
-                                Colors.Primary
-                            )
-                        }
-                    }
                 }
 
-                // Vertical scrollbar
+                // Scrollbars
                 VerticalScrollbar(
                     modifier = Modifier.align(Alignment.CenterEnd),
                     adapter = rememberScrollbarAdapter(verticalScrollState)
@@ -198,12 +168,12 @@ fun ReportsScreen() {
 }
 
 @Composable
-private fun TableHeaderCell(text: String, widthFraction: Float) {
+private fun TableHeaderCell(text: String, width: Dp) {
     Text(
         text = text,
         style = MaterialTheme.typography.subtitle2,
         color = Colors.Primary,
-        modifier = Modifier.fillMaxWidth(widthFraction),
+        modifier = Modifier.width(width),
         textAlign = TextAlign.Start,
         maxLines = 1
     )
@@ -212,13 +182,13 @@ private fun TableHeaderCell(text: String, widthFraction: Float) {
 @Composable
 private fun TableCell(
     text: String,
-    widthFraction: Float,
+    width: Dp,
     textColor: Color = Colors.TextPrimary
 ) {
     Text(
         text = text,
         style = MaterialTheme.typography.body2,
-        modifier = Modifier.fillMaxWidth(widthFraction),
+        modifier = Modifier.width(width),
         textAlign = TextAlign.Start,
         maxLines = 1,
         color = textColor
