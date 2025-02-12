@@ -30,7 +30,8 @@ enum class Screen {
     POS,
     REPORTS,
     INVENTORY,
-    SETTINGS
+    SETTINGS,
+    DEBTS  // Add this
 }
 
 @Composable
@@ -70,6 +71,7 @@ fun App() {
                             onLogout = { currentUser = null }
                         )
                     }
+                    Screen.DEBTS -> if (currentUser?.isAdmin == true) DebtsScreen()
                 }
             }
         }
@@ -116,6 +118,12 @@ private fun NavigationBar(
                 label = "Settings",
                 selected = currentScreen == Screen.SETTINGS,
                 onClick = { onScreenChange(Screen.SETTINGS) }
+            )
+            NavItem(
+                icon = Icons.Default.Money,
+                label = "Debts",
+                selected = currentScreen == Screen.DEBTS,
+                onClick = { onScreenChange(Screen.DEBTS) }
             )
         }
     }

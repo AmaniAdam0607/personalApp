@@ -24,9 +24,11 @@ import org.dromio.models.Product
 import org.dromio.repository.ProductRepository
 import org.dromio.repository.TransactionRepository
 import org.dromio.models.CartItem
+import org.dromio.repository.DebtRepository
 
 private val productRepository = ProductRepository()
 private val transactionRepository = TransactionRepository()
+private val debtRepository = DebtRepository() // Add repository instance
 
 @Composable
 fun POSScreen(onLogout: () -> Unit = {}) {  // Add logout callback
@@ -98,8 +100,6 @@ fun POSScreen(onLogout: () -> Unit = {}) {  // Add logout callback
 
                 PaymentSection(
                     items = cartItems,
-                    paymentMethod = paymentMethod,
-                    onPaymentMethodChange = { paymentMethod = it },
                     onProcessSale = {
                         val total = cartItems.sumOf {
                             it.product.sellingPrice * it.quantity.toDouble()
@@ -234,91 +234,130 @@ private fun CartItemRow(item: CartItem, onRemove: (CartItem) -> Unit) {
 }
 
 @Composable
-private fun PaymentSection(
-    items: List<CartItem>,
-    paymentMethod: String,
-    onPaymentMethodChange: (String) -> Unit,
-    onProcessSale: () -> Unit
+private fun PaymentDialog(
+    total: Double,
+    onDismiss: () -> Unit,
+    onProcessSale: (isDebt: Boolean, customerName: String?) -> Unit
 ) {
-    val total = items.sumOf { it.product.sellingPrice * it.quantity }
+    var isDebt by remember { mutableStateOf(false) }
+    var customerName by remember { mutableStateOf("") }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        backgroundColor = Colors.Surface,
-        elevation = 2.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Simple Payment Method Dropdown
-            Box(modifier = Modifier.fillMaxWidth()) {
-                var expanded by remember { mutableStateOf(false) }
-                val methods = listOf("Cash", "Card", "Mobile Payment")
-
-                OutlinedTextField(
-                    value = paymentMethod,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Payment Method") },
-                    trailingIcon = {
-                        IconButton(onClick = { expanded = !expanded }) {
-                            Icon(
-                                Icons.Default.ArrowDropDown,
-                                "Select payment method",
-                                Modifier.rotate(if (expanded) 180f else 0f)
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false },
-                    modifier = Modifier.fillMaxWidth()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Process Sale") },
+        text = {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    methods.forEach { method ->
-                        DropdownMenuItem(
-                            onClick = {
-                                onPaymentMethodChange(method)
-                                expanded = false
-                            }
-                        ) {
-                            Text(method)
-                        }
-                    }
+                    Text("Total Amount:")
+                    Text("$CURRENCY_SYMBOL${String.format("%.2f", total)}")
+                }
+
+                if (isDebt) {
+                    Spacer(Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = customerName,
+                        onValueChange = { customerName = it },
+                        label = { Text("Customer Name") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
-
-            // Total
+        },
+        buttons = {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    "Total:",
-                    style = MaterialTheme.typography.h6
-                )
-                Text(
-                    "$CURRENCY_SYMBOL${String.format("%.2f", total)}",
-                    style = MaterialTheme.typography.h6
-                )
-            }
-
-            // Process Sale Button
-            Button(
-                onClick = onProcessSale,
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                colors = ButtonDefaults.buttonColors(backgroundColor = Colors.Primary),
-                enabled = items.isNotEmpty()
-            ) {
-                Text(
-                    "Process Sale (${CURRENCY_SYMBOL}${String.format("%.2f", total)})",
-                    color = Color.White
-                )
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+                Button(
+                    onClick = { isDebt = true },
+                    enabled = !isDebt,
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = Colors.Secondary
+                    )
+                ) {
+                    Text("Add as Debt")
+                }
+                Button(
+                    onClick = { onProcessSale(isDebt, if (isDebt) customerName else null) },
+                    enabled = !isDebt || customerName.isNotEmpty(),
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = Colors.Primary
+                    )
+                ) {
+                    Text(if (isDebt) "Save Debt" else "Receive Payment")
+                }
             }
         }
+    )
+}
+
+@Composable
+private fun PaymentSection(
+    items: List<CartItem>,
+    onProcessSale: () -> Unit
+) {
+    var showPaymentDialog by remember { mutableStateOf(false) }
+    val total = items.sumOf { it.product.sellingPrice * it.quantity }
+
+    Column(
+        modifier = Modifier.padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                "Total:",
+                style = MaterialTheme.typography.h6
+            )
+            Text(
+                "$CURRENCY_SYMBOL${String.format("%.2f", total)}",
+                style = MaterialTheme.typography.h6
+            )
+        }
+
+        Button(
+            onClick = { showPaymentDialog = true },
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            colors = ButtonDefaults.buttonColors(backgroundColor = Colors.Primary),
+            enabled = items.isNotEmpty()
+        ) {
+            Text("Process Sale", color = Color.White)
+        }
+    }
+
+    if (showPaymentDialog) {
+        PaymentDialog(
+            total = total,
+            onDismiss = { showPaymentDialog = false },
+            onProcessSale = { isDebt, customerName ->
+                if (isDebt && customerName != null) {
+                    // Process as debt
+                    val transactionId = transactionRepository.createTransaction(
+                        items = items,
+                        total = total,
+                        paymentMethod = "DEBT"
+                    )
+                    debtRepository.createDebt(customerName, transactionId, total) // Use the instance
+                } else {
+                    // Process as normal sale
+                    transactionRepository.createTransaction(
+                        items = items,
+                        total = total,
+                        paymentMethod = "CASH"
+                    )
+                }
+                onProcessSale()
+                showPaymentDialog = false
+            }
+        )
     }
 }
 

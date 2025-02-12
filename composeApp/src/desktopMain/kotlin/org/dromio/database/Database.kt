@@ -25,7 +25,7 @@ object Database {
 
             transaction {
                 addLogger(StdOutSqlLogger)
-                SchemaUtils.create(Products, Transactions, TransactionItems, StockAdjustments, Users)
+                SchemaUtils.create(Products, Transactions, TransactionItems, StockAdjustments, Users, Debts)
 
                 // Create default admin if none exists
                 if (Users.selectAll().count() == 0L) {
@@ -120,4 +120,13 @@ object Users : IntIdTable() {
     val passwordHash = varchar("password_hash", 255)
     val isAdmin = bool("is_admin")
     val createdAt = long("created_at")
+}
+
+object Debts : IntIdTable() {
+    val customerName = varchar("customer_name", 255)
+    val transactionId = reference("transaction_id", Transactions)
+    val amount = double("amount")
+    val isPaid = bool("is_paid").default(false)
+    val createdAt = long("created_at")
+    val paidAt = long("paid_at").nullable()
 }

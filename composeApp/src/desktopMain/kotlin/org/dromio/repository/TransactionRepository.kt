@@ -14,7 +14,11 @@ import java.time.ZoneOffset
 import org.dromio.models.SaleDetail
 
 class TransactionRepository {
-    fun createTransaction(items: List<CartItem>, total: Double, paymentMethod: String) = transaction {
+    fun createTransaction(
+        items: List<CartItem>,
+        total: Double,
+        paymentMethod: String
+    ): Int = transaction {
         val transactionId = Transactions.insert {
             it[timestamp] = LocalDateTime.now().toEpochSecond(ZoneOffset.UTC)
             it[Transactions.total] = total
@@ -41,6 +45,8 @@ class TransactionRepository {
                 }
             }
         }
+
+        transactionId.value  // Return the integer ID
     }
 
     fun getRecentTransactions(limit: Int = 10): List<Transaction> = transaction {
