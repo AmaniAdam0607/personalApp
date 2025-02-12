@@ -1,0 +1,9 @@
+---
+---
+
+***
+
+Explore on what is immutable and mutable?
+What is the diffrence between an immmutable and a read-only?
+
+Function signatire consists of its "name", "parameter list" and "return type" -- [ overloading is concerned with the parameter list only ]
