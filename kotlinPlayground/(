@@ -1,0 +1,20 @@
+//aclass Point(val x : Int, val y : Int) {
+//a//
+//a//    fun describeIf(prediCate : () -> Boolean ) {
+//a//    if     (prediCate) {
+//a//        println("I am a poiNt hoorey!!")
+//a//    }
+//a//    }
+//a//
+//a//    operator fun plus(otherPoint : Point) = Point(this.x + otherPoint.x, this.y + otherPoint.y)
+//a//
+//a//
+a//    override fun toString()  =  "(x  =  $x, y  =  $y)"
+a//}
+a//
+a//    fun main() {
+a//    val poiNt = Point(2, 4)
+a//    poiNpoiNpoiNpoiNpoiNpoiNt.describeIf { 5 >= 5 }
+a//       println("$poiNt + $poiNt = ${poiNt + poiNt}")
+a//}
+a//
