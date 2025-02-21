@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.PasswordVisualTransformation  // Add this import
 import androidx.compose.ui.unit.dp
 import org.dromio.Colors
 import org.dromio.repository.UserRepository
@@ -16,9 +17,10 @@ import org.dromio.models.UserCredentials
 import org.dromio.models.User
 
 @Composable
-fun SettingsScreen(onLogout: () -> Unit) {
+fun SettingsScreen(currentUser: User, onLogout: () -> Unit) {  // Add currentUser parameter
     var showAddUser by remember { mutableStateOf(false) }
     var showResetPassword by remember { mutableStateOf<User?>(null) }
+    var showChangePassword by remember { mutableStateOf(false) }  // Add this
     val userRepository = remember { UserRepository() }
     var users by remember { mutableStateOf(userRepository.getAllUsers()) }
 
@@ -26,20 +28,30 @@ fun SettingsScreen(onLogout: () -> Unit) {
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Header with Logout
+        // Header with Logout and Change Password
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("User Management", style = MaterialTheme.typography.h5)
-            Button(
-                onClick = onLogout,
-                colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.error)
-            ) {
-                Icon(Icons.Default.ExitToApp, contentDescription = "Logout")
-                Spacer(Modifier.width(8.dp))
-                Text("Logout", color = MaterialTheme.colors.onError)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { showChangePassword = true },
+                    colors = ButtonDefaults.buttonColors(backgroundColor = Colors.Secondary)
+                ) {
+                    Icon(Icons.Default.Lock, contentDescription = "Change Password")
+                    Spacer(Modifier.width(8.dp))
+                    Text("Change My Password")
+                }
+                Button(
+                    onClick = onLogout,
+                    colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.error)
+                ) {
+                    Icon(Icons.Default.ExitToApp, contentDescription = "Logout")
+                    Spacer(Modifier.width(8.dp))
+                    Text("Logout", color = MaterialTheme.colors.onError)
+                }
             }
         }
 
@@ -76,6 +88,25 @@ fun SettingsScreen(onLogout: () -> Unit) {
                 }
             }
         }
+    }
+
+    // Add Change Password Dialog
+    if (showChangePassword) {
+        ChangePasswordDialog(
+            onDismiss = { showChangePassword = false },
+            onConfirm = { oldPassword, newPassword ->
+                val success = userRepository.changePassword(
+                    currentUser.id,
+                    oldPassword,
+                    newPassword
+                )
+                if (!success) {
+                    // Show error (you might want to handle this better)
+                    println("Failed to change password")
+                }
+                showChangePassword = false
+            }
+        )
     }
 
     // Dialogs
@@ -209,6 +240,65 @@ private fun ResetPasswordDialog(
                 enabled = newPassword.isNotEmpty()
             ) {
                 Text("Reset")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun ChangePasswordDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (oldPassword: String, newPassword: String) -> Unit
+) {
+    var oldPassword by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Change Password") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = oldPassword,
+                    onValueChange = { oldPassword = it },
+                    label = { Text("Current Password") },
+                    visualTransformation = PasswordVisualTransformation()
+                )
+                OutlinedTextField(
+                    value = newPassword,
+                    onValueChange = { newPassword = it },
+                    label = { Text("New Password") },
+                    visualTransformation = PasswordVisualTransformation()
+                )
+                OutlinedTextField(
+                    value = confirmPassword,
+                    onValueChange = { confirmPassword = it },
+                    label = { Text("Confirm New Password") },
+                    visualTransformation = PasswordVisualTransformation()
+                )
+                if (newPassword != confirmPassword) {
+                    Text(
+                        "Passwords don't match",
+                        color = MaterialTheme.colors.error,
+                        style = MaterialTheme.typography.caption
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(oldPassword, newPassword) },
+                enabled = newPassword.isNotEmpty() &&
+                         newPassword == confirmPassword &&
+                         oldPassword.isNotEmpty()
+            ) {
+                Text("Change Password")
             }
         },
         dismissButton = {

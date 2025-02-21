@@ -62,7 +62,10 @@ fun App() {
                     Screen.INVENTORY -> if (currentUser?.isAdmin == true) InventoryScreen()
                     Screen.SETTINGS ->
                             if (currentUser?.isAdmin == true) {
-                                SettingsScreen(onLogout = { currentUser = null })
+                                SettingsScreen(
+                                    currentUser = currentUser!!,  // Pass the current user
+                                    onLogout = { currentUser = null }
+                                )
                             }
                     Screen.DEBTS -> if (currentUser?.isAdmin == true) DebtsScreen()
                 }

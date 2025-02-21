@@ -55,6 +55,18 @@ class UserRepository {
         }
     }
 
+    fun changePassword(userId: Int, oldPassword: String, newPassword: String): Boolean = transaction {
+        val user = Users.select { Users.id eq userId }.firstOrNull()
+        if (user != null && user[Users.passwordHash] == hashPassword(oldPassword)) {
+            Users.update({ Users.id eq userId }) {
+                it[passwordHash] = hashPassword(newPassword)
+            }
+            true
+        } else {
+            false
+        }
+    }
+
     private fun hashPassword(password: String): String {
         return java.security.MessageDigest.getInstance("SHA-256")
             .digest(password.toByteArray())
