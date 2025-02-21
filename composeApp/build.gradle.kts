@@ -43,8 +43,18 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+
             packageName = "org.dromio"
             packageVersion = "1.0.0"
+
+            modules("java.sql")
+
+            windows {
+                menuGroup = "Avelyn Shop"
+                shortcut = true
+                menu = true
+                includeAllModules = true
+            }
         }
     }
 }
