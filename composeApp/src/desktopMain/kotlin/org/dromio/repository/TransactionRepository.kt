@@ -1,57 +1,86 @@
 package org.dromio.repository
 
-import org.dromio.models.CartItem
-import org.dromio.models.Product
-import org.dromio.models.Transaction
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 import org.dromio.database.Products
 import org.dromio.database.TransactionItems
 import org.dromio.database.Transactions
+import org.dromio.models.CartItem
+import org.dromio.models.Product
+import org.dromio.models.SaleDetail
+import org.dromio.models.Transaction
+import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
-import org.jetbrains.exposed.dao.id.EntityID
-import java.time.LocalDateTime
-import java.time.ZoneOffset
-import org.dromio.models.SaleDetail
 
 class TransactionRepository {
-    fun createTransaction(
-        items: List<CartItem>,
-        total: Double,
-        paymentMethod: String
-    ): Int = transaction {
-        val transactionId = Transactions.insert {
-            it[timestamp] = LocalDateTime.now().toEpochSecond(ZoneOffset.UTC)
-            it[Transactions.total] = total
-            it[Transactions.paymentMethod] = paymentMethod
-            it[type] = "SALE"
-            it[profit] = items.sumOf { item ->
-                item.quantity * (item.product.sellingPrice - item.product.buyingPrice)
-            }
-        } get Transactions.id
+    fun createTransaction(items: List<CartItem>, total: Double, paymentMethod: String): Int =
+            transaction {
+                // First create the transaction record
+                val transactionId =
+                        Transactions.insert {
+                            it[timestamp] = LocalDateTime.now().toEpochSecond(ZoneOffset.UTC)
+                            it[Transactions.total] = total
+                            it[Transactions.paymentMethod] = paymentMethod
+                            it[type] = "SALE"
+                            it[profit] =
+                                    items.sumOf { item ->
+                                        item.quantity *
+                                                (item.product.sellingPrice -
+                                                        item.product.buyingPrice)
+                                    }
+                        } get Transactions.id
 
-        items.forEach { item ->
-            TransactionItems.insert {
-                it[TransactionItems.transactionId] = transactionId
-                it[productId] = item.product.id
-                it[quantity] = item.quantity
-                it[priceAtTime] = item.product.sellingPrice
-                it[costAtTime] = item.product.buyingPrice
-            }
+                // Process each item once
+                items.forEach { item ->
+                    // First, record the transaction item
+                    TransactionItems.insert {
+                        it[TransactionItems.transactionId] = transactionId
+                        it[productId] = item.product.id
+                        it[quantity] = item.quantity
+                        it[priceAtTime] = item.product.sellingPrice
+                        it[costAtTime] = item.product.buyingPrice
+                    }
 
-            // Update stock
-            Products.update({ Products.id eq item.product.id }) {
-                with(SqlExpressionBuilder) {
-                    it[stockQuantity] = stockQuantity - item.quantity
+                    // Then, update the stock
+                    Products.update({ Products.id eq item.product.id }) {
+                        it[stockQuantity] = item.product.stockQuantity - item.quantity
+                        it[updatedAt] = System.currentTimeMillis()
+                    }
                 }
-            }
-        }
 
-        transactionId.value  // Return the integer ID
-    }
+                transactionId.value
+            }
 
     fun getRecentTransactions(limit: Int = 10): List<Transaction> = transaction {
-        val transactions = (Transactions leftJoin TransactionItems leftJoin Products)
-            .select { Transactions.id eq TransactionItems.transactionId }
+        val transactions =
+                (Transactions leftJoin TransactionItems leftJoin Products)
+                        .select { Transactions.id eq TransactionItems.transactionId }
+                        .orderBy(Transactions.timestamp to SortOrder.DESC)
+                        .limit(limit)
+                        .map { row ->
+                            Transaction(
+                                    id = row[Transactions.id].toString(),
+                                    timestamp =
+                                            LocalDateTime.ofEpochSecond(
+                                                    row[Transactions.timestamp],
+                                                    0,
+                                                    ZoneOffset.UTC
+                                            ),
+                                    items = getTransactionItems(row[Transactions.id]),
+                                    total = row[Transactions.total],
+                                    paymentMethod = row[Transactions.paymentMethod]
+                            )
+                        }
+        transactions
+    }
+
+    fun getReturnableTransactions(limit: Int = 50): List<Transaction> = transaction {
+        (Transactions leftJoin TransactionItems leftJoin Products)
+            .select { 
+                (Transactions.id eq TransactionItems.transactionId) and
+                (Transactions.type eq "SALE")  // Only get SALE transactions, not RETURN
+            }
             .orderBy(Transactions.timestamp to SortOrder.DESC)
             .limit(limit)
             .map { row ->
@@ -66,44 +95,44 @@ class TransactionRepository {
                     total = row[Transactions.total],
                     paymentMethod = row[Transactions.paymentMethod]
                 )
-            }
-        transactions
+            }.distinctBy { it.id }  // Ensure unique transactions
     }
 
     private fun getTransactionItems(transactionId: EntityID<Int>): List<CartItem> =
-        (TransactionItems innerJoin Products)
-            .select { TransactionItems.transactionId eq transactionId }
-            .map { row ->
-                CartItem(
-                    product = Product(
-                        id = row[Products.id].value,
-                        name = row[Products.name],
-                        sellingPrice = row[Products.sellingPrice],
-                        buyingPrice = row[Products.buyingPrice],
-                        stockQuantity = row[Products.stockQuantity]
-                    ),
-                    quantity = row[TransactionItems.quantity]
-                )
-            }
+            (TransactionItems innerJoin Products)
+                    .select { TransactionItems.transactionId eq transactionId }
+                    .map { row ->
+                        CartItem(
+                                product =
+                                        Product(
+                                                id = row[Products.id].value,
+                                                name = row[Products.name],
+                                                sellingPrice = row[Products.sellingPrice],
+                                                buyingPrice = row[Products.buyingPrice],
+                                                stockQuantity = row[Products.stockQuantity]
+                                        ),
+                                quantity = row[TransactionItems.quantity]
+                        )
+                    }
 
     fun getSalesReport(startTime: Long, endTime: Long) = transaction {
-        Transactions
-            .select {
-                (Transactions.timestamp greaterEq startTime) and
-                (Transactions.timestamp lessEq endTime) and
-                (Transactions.type eq "SALE")
-            }
-            .map {
-                SaleReport(
-                    timestamp = it[Transactions.timestamp],
-                    total = it[Transactions.total],
-                    profit = it[Transactions.profit]
-                )
-            }
+        Transactions.select {
+            (Transactions.timestamp greaterEq startTime) and
+                    (Transactions.timestamp lessEq endTime) and
+                    (Transactions.type eq "SALE")
+        }
+                .map {
+                    SaleReport(
+                            timestamp = it[Transactions.timestamp],
+                            total = it[Transactions.total],
+                            profit = it[Transactions.profit]
+                    )
+                }
     }
 
     fun getProfitReport(startTime: Long, endTime: Long) = transaction {
-        val query = """
+        val query =
+                """
             SELECT
                 p.id,
                 p.name,
@@ -120,30 +149,33 @@ class TransactionRepository {
         exec(query) { rs ->
             buildList {
                 while (rs.next()) {
-                    add(ProductProfitReport(
-                        productId = rs.getInt("id"),
-                        productName = rs.getString("name"),
-                        unitsSold = rs.getInt("units_sold"),
-                        totalProfit = rs.getDouble("total_profit")
-                    ))
+                    add(
+                            ProductProfitReport(
+                                    productId = rs.getInt("id"),
+                                    productName = rs.getString("name"),
+                                    unitsSold = rs.getInt("units_sold"),
+                                    totalProfit = rs.getDouble("total_profit")
+                            )
+                    )
                 }
             }
         }
     }
 
     fun recordPurchase(
-        products: List<Pair<Product, Int>>, // Product and quantity
-        total: Double,
-        notes: String? = null
+            products: List<Pair<Product, Int>>, // Product and quantity
+            total: Double,
+            notes: String? = null
     ) = transaction {
-        val transactionId = Transactions.insert {
-            it[timestamp] = System.currentTimeMillis()
-            it[Transactions.total] = total
-            it[profit] = 0.0 // Purchase has no profit
-            it[paymentMethod] = "PURCHASE"
-            it[type] = "PURCHASE"
-            it[Transactions.notes] = notes
-        } get Transactions.id
+        val transactionId =
+                Transactions.insert {
+                    it[timestamp] = System.currentTimeMillis()
+                    it[Transactions.total] = total
+                    it[profit] = 0.0 // Purchase has no profit
+                    it[paymentMethod] = "PURCHASE"
+                    it[type] = "PURCHASE"
+                    it[Transactions.notes] = notes
+                } get Transactions.id
 
         products.forEach { (product, quantity) ->
             TransactionItems.insert {
@@ -164,47 +196,61 @@ class TransactionRepository {
     }
 
     fun getDetailedSales(
-        startDate: LocalDateTime,
-        endDate: LocalDateTime,
-        search: String = ""
+            startDate: LocalDateTime,
+            endDate: LocalDateTime,
+            search: String = ""
     ): List<SaleDetail> = transaction {
         (TransactionItems innerJoin Transactions innerJoin Products)
-            .select {
-                (Transactions.timestamp greaterEq startDate.toEpochSecond(ZoneOffset.UTC)) and
-                (Transactions.timestamp lessEq endDate.toEpochSecond(ZoneOffset.UTC)) and
-                (Products.name.lowerCase() like "%${search.lowercase()}%")
-            }
-            .map { row ->
-                SaleDetail(
-                    id = row[Transactions.id].toString(),
-                    productName = row[Products.name],
-                    quantity = row[TransactionItems.quantity],
-                    buyingPrice = row[TransactionItems.costAtTime],
-                    sellingPrice = row[TransactionItems.priceAtTime],
-                    total = row[TransactionItems.quantity] * row[TransactionItems.priceAtTime],
-                    profit = row[TransactionItems.quantity] *
-                        (row[TransactionItems.priceAtTime] - row[TransactionItems.costAtTime]),
-                    date = LocalDateTime.ofEpochSecond(
-                        row[Transactions.timestamp],
-                        0,
-                        ZoneOffset.UTC
+                .select {
+                    (Transactions.timestamp greaterEq startDate.toEpochSecond(ZoneOffset.UTC)) and
+                            (Transactions.timestamp lessEq
+                                    endDate.toEpochSecond(ZoneOffset.UTC)) and
+                            (Products.name.lowerCase() like "%${search.lowercase()}%")
+                }
+                .map { row ->
+                    SaleDetail(
+                            id = row[Transactions.id].toString(),
+                            productName = row[Products.name],
+                            quantity = row[TransactionItems.quantity],
+                            buyingPrice = row[TransactionItems.costAtTime],
+                            sellingPrice = row[TransactionItems.priceAtTime],
+                            total =
+                                    row[TransactionItems.quantity] *
+                                            row[TransactionItems.priceAtTime],
+                            profit =
+                                    row[TransactionItems.quantity] *
+                                            (row[TransactionItems.priceAtTime] -
+                                                    row[TransactionItems.costAtTime]),
+                            date =
+                                    LocalDateTime.ofEpochSecond(
+                                            row[Transactions.timestamp],
+                                            0,
+                                            ZoneOffset.UTC
+                                    )
                     )
-                )
+                }
+    }
+
+    fun returnTransaction(transaction: Transaction) = transaction {
+        // Update transaction type to RETURN
+        Transactions.update({ Transactions.id eq transaction.id.toInt() }) { it[type] = "RETURN" }
+
+        // Update stock and profit
+        transaction.items.forEach { item ->
+            Products.update({ Products.id eq item.product.id }) {
+                with(SqlExpressionBuilder) { it[stockQuantity] = stockQuantity + item.quantity }
             }
+        }
     }
 
     // Add methods for profit and debts reports as needed
 }
 
-data class SaleReport(
-    val timestamp: Long,
-    val total: Double,
-    val profit: Double
-)
+data class SaleReport(val timestamp: Long, val total: Double, val profit: Double)
 
 data class ProductProfitReport(
-    val productId: Int,
-    val productName: String,
-    val unitsSold: Int,
-    val totalProfit: Double
+        val productId: Int,
+        val productName: String,
+        val unitsSold: Int,
+        val totalProfit: Double
 )
