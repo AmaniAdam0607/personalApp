@@ -57,19 +57,19 @@ object Database {
     }
 
     private fun addSampleData() {
-        if (Products.selectAll().count().toInt() == 0) {
-            val now = System.currentTimeMillis()
-            Products.insert {
-                it[name] = "Laptop"
-                it[sellingPrice] = 999.99
-                it[buyingPrice] = 800.00
-                it[stockQuantity] = 5
-                it[minimumStock] = 2
-                it[createdAt] = now
-                it[updatedAt] = now
-            }
+        //if (Products.selectAll().count().toInt() == 0) {
+        //    val now = System.currentTimeMillis()
+        //    Products.insert {
+        //        it[name] = "Laptop"
+        //        it[sellingPrice] = 999.99
+        //        it[buyingPrice] = 800.00
+        //        it[stockQuantity] = 5
+        //        it[minimumStock] = 2
+        //        it[createdAt] = now
+        //        it[updatedAt] = now
+        //    }   // ...add more sample products...
             // ...add more sample products...
-        }
+        
     }
 
     private fun hashPassword(password: String): String {

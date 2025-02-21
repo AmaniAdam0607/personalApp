@@ -1,6 +1,6 @@
 package org.dromio.repository
 
-import org.dromio.database.Database  // Add this import
+import org.dromio.database.Database
 import org.dromio.database.Users
 import org.dromio.models.User
 import org.dromio.models.UserCredentials
@@ -10,7 +10,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 
 class UserRepository {
     fun authenticate(credentials: UserCredentials): User? {
-        Database.ensureInitialized() // Add this line to ensure DB is initialized
+        Database.ensureInitialized()
         return transaction {
             val passwordHash = hashPassword(credentials.password)
             Users.select {
@@ -26,13 +26,13 @@ class UserRepository {
         }
     }
 
-    fun createUser(credentials: UserCredentials, isAdmin: Boolean = false) = transaction {
-        Users.insert {
+    fun createUser(credentials: UserCredentials, isAdmin: Boolean = false): Int = transaction {
+        (Users.insert {
             it[username] = credentials.username
             it[passwordHash] = hashPassword(credentials.password)
             it[Users.isAdmin] = isAdmin
             it[createdAt] = System.currentTimeMillis()
-        }
+        } get Users.id).value
     }
 
     fun getAllUsers(): List<User> = transaction {

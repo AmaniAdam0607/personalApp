@@ -101,16 +101,7 @@ fun POSScreen(onLogout: () -> Unit = {}) {  // Add logout callback
                 PaymentSection(
                     items = cartItems,
                     onProcessSale = {
-                        val total = cartItems.sumOf {
-                            it.product.sellingPrice * it.quantity.toDouble()
-                        }
-
-                        transactionRepository.createTransaction(
-                            items = cartItems.toList(),
-                            total = total,
-                            paymentMethod = paymentMethod
-                        )
-                        cartItems.clear()
+                        cartItems.clear()  // Only clear the cart, transaction is already created
                     }
                 )
             }
@@ -236,6 +227,7 @@ private fun CartItemRow(item: CartItem, onRemove: (CartItem) -> Unit) {
 @Composable
 private fun PaymentDialog(
     total: Double,
+    isProcessing: Boolean,  // Add this parameter
     onDismiss: () -> Unit,
     onProcessSale: (isDebt: Boolean, customerName: String?) -> Unit
 ) {
@@ -243,7 +235,7 @@ private fun PaymentDialog(
     var customerName by remember { mutableStateOf("") }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isProcessing) onDismiss() },  // Prevent dismiss while processing
         title = { Text("Process Sale") },
         text = {
             Column {
@@ -264,6 +256,9 @@ private fun PaymentDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
+                if (isProcessing) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
             }
         },
         buttons = {
@@ -271,12 +266,15 @@ private fun PaymentDialog(
                 modifier = Modifier.padding(8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                TextButton(onClick = onDismiss) {
+                TextButton(
+                    onClick = onDismiss,
+                    enabled = !isProcessing  // Disable during processing
+                ) {
                     Text("Cancel")
                 }
                 Button(
                     onClick = { isDebt = true },
-                    enabled = !isDebt,
+                    enabled = !isDebt && !isProcessing,  // Disable during processing
                     colors = ButtonDefaults.buttonColors(
                         backgroundColor = Colors.Secondary
                     )
@@ -285,7 +283,7 @@ private fun PaymentDialog(
                 }
                 Button(
                     onClick = { onProcessSale(isDebt, if (isDebt) customerName else null) },
-                    enabled = !isDebt || customerName.isNotEmpty(),
+                    enabled = (!isDebt || customerName.isNotEmpty()) && !isProcessing,  // Disable during processing
                     colors = ButtonDefaults.buttonColors(
                         backgroundColor = Colors.Primary
                     )
@@ -303,6 +301,7 @@ private fun PaymentSection(
     onProcessSale: () -> Unit
 ) {
     var showPaymentDialog by remember { mutableStateOf(false) }
+    var isProcessing by remember { mutableStateOf(false) }  // Add processing state
     val total = items.sumOf { it.product.sellingPrice * it.quantity }
 
     Column(
@@ -327,7 +326,7 @@ private fun PaymentSection(
             onClick = { showPaymentDialog = true },
             modifier = Modifier.fillMaxWidth().height(48.dp),
             colors = ButtonDefaults.buttonColors(backgroundColor = Colors.Primary),
-            enabled = items.isNotEmpty()
+            enabled = items.isNotEmpty() && !isProcessing
         ) {
             Text("Process Sale", color = Color.White)
         }
@@ -336,26 +335,38 @@ private fun PaymentSection(
     if (showPaymentDialog) {
         PaymentDialog(
             total = total,
-            onDismiss = { showPaymentDialog = false },
-            onProcessSale = { isDebt, customerName ->
-                if (isDebt && customerName != null) {
-                    // Process as debt
-                    val transactionId = transactionRepository.createTransaction(
-                        items = items,
-                        total = total,
-                        paymentMethod = "DEBT"
-                    )
-                    debtRepository.createDebt(customerName, transactionId, total) // Use the instance
-                } else {
-                    // Process as normal sale
-                    transactionRepository.createTransaction(
-                        items = items,
-                        total = total,
-                        paymentMethod = "CASH"
-                    )
+            isProcessing = isProcessing,  // Pass processing state
+            onDismiss = { 
+                if (!isProcessing) {  // Only allow dismiss if not processing
+                    showPaymentDialog = false 
                 }
-                onProcessSale()
-                showPaymentDialog = false
+            },
+            onProcessSale = { isDebt, customerName ->
+                if (!isProcessing) {  // Prevent double processing
+                    isProcessing = true
+                    try {
+                        if (isDebt && customerName != null) {
+                            // Process as debt
+                            val transactionId = transactionRepository.createTransaction(
+                                items = items,
+                                total = total,
+                                paymentMethod = "DEBT"
+                            )
+                            debtRepository.createDebt(customerName, transactionId, total)
+                        } else {
+                            // Process as normal sale
+                            transactionRepository.createTransaction(
+                                items = items,
+                                total = total,
+                                paymentMethod = "CASH"
+                            )
+                        }
+                        showPaymentDialog = false  // Close dialog first
+                        onProcessSale()  // Then clear cart
+                    } finally {
+                        isProcessing = false
+                    }
+                }
             }
         )
     }

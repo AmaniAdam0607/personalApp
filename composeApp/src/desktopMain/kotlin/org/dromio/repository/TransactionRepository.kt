@@ -15,42 +15,55 @@ import org.jetbrains.exposed.sql.transactions.transaction
 
 class TransactionRepository {
     fun createTransaction(items: List<CartItem>, total: Double, paymentMethod: String): Int =
-            transaction {
-                // First create the transaction record
-                val transactionId =
-                        Transactions.insert {
-                            it[timestamp] = LocalDateTime.now().toEpochSecond(ZoneOffset.UTC)
-                            it[Transactions.total] = total
-                            it[Transactions.paymentMethod] = paymentMethod
-                            it[type] = "SALE"
-                            it[profit] =
-                                    items.sumOf { item ->
-                                        item.quantity *
-                                                (item.product.sellingPrice -
-                                                        item.product.buyingPrice)
-                                    }
-                        } get Transactions.id
+        transaction {
+            println("\n=== Creating New Transaction ===")
+            println("Payment Method: $paymentMethod")
+            println("Total Amount: $total")
+            println("Items:")
+            items.forEach { item ->
+                println("- ${item.product.name} x${item.quantity} @ ${item.product.sellingPrice}")
+            }
 
-                // Process each item once
-                items.forEach { item ->
-                    // First, record the transaction item
-                    TransactionItems.insert {
-                        it[TransactionItems.transactionId] = transactionId
-                        it[productId] = item.product.id
-                        it[quantity] = item.quantity
-                        it[priceAtTime] = item.product.sellingPrice
-                        it[costAtTime] = item.product.buyingPrice
-                    }
+            // First create the transaction record
+            val transactionId = Transactions.insert {
+                it[timestamp] = LocalDateTime.now().toEpochSecond(ZoneOffset.UTC)
+                it[Transactions.total] = total
+                it[Transactions.paymentMethod] = paymentMethod
+                it[type] = "SALE"
+                it[profit] = items.sumOf { item ->
+                    item.quantity * (item.product.sellingPrice - item.product.buyingPrice)
+                }
+            } get Transactions.id
 
-                    // Then, update the stock
-                    Products.update({ Products.id eq item.product.id }) {
-                        it[stockQuantity] = item.product.stockQuantity - item.quantity
-                        it[updatedAt] = System.currentTimeMillis()
-                    }
+            println("Transaction ID: ${transactionId.value}")
+
+            // Process each item once
+            items.forEach { item ->
+                // First, record the transaction item
+                TransactionItems.insert {
+                    it[TransactionItems.transactionId] = transactionId
+                    it[TransactionItems.productId] = item.product.id
+                    it[TransactionItems.quantity] = item.quantity
+                    it[TransactionItems.priceAtTime] = item.product.sellingPrice
+                    it[TransactionItems.costAtTime] = item.product.buyingPrice
                 }
 
-                transactionId.value
+                // Then, update the stock
+                val oldStock = Products.select { Products.id eq item.product.id }
+                    .first()[Products.stockQuantity]
+                val newStock = oldStock - item.quantity
+
+                Products.update({ Products.id eq item.product.id }) {
+                    it[stockQuantity] = newStock
+                    it[updatedAt] = System.currentTimeMillis()
+                }
+
+                println("Updated stock for ${item.product.name}: $oldStock -> $newStock")
             }
+
+            println("=== Transaction Complete ===\n")
+            transactionId.value
+        }
 
     fun getRecentTransactions(limit: Int = 10): List<Transaction> = transaction {
         val transactions =
